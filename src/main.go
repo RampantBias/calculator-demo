@@ -10,15 +10,16 @@ import (
 type Operation string
 
 const (
-	Add      Operation = "add"
-	Subtract Operation = "subtract"
-	Multiply Operation = "multiply"
+	Add         Operation = "add"
+	Subtract    Operation = "subtract"
+	Multiply    Operation = "multiply"
+	Divide      Operation = "divide"
 )
 
 type Equation struct {
-	Operation Operation `json:"operation"`
-	Left      float64   `json:"left"`
-	Right     float64   `json:"right"`
+	Operation Operation  `json:"operation"`
+	Left      float64    `json:"left"`
+	Right     float64    `json:"right"`
 }
 
 type HealthResponse struct {
@@ -78,6 +79,17 @@ func postCalculate(ctx *gin.Context) {
 		result = equation.Left - equation.Right
 	case Multiply:
 		result = equation.Left * equation.Right
+	case Divide:
+		if equation.Right == 0 {
+			ctx.JSON(http.StatusUnprocessableEntity, ErrorResponse{
+				Error: APIError{
+					Code:    "division_by_zero",
+					Message: "cannot divide by zero",
+				},
+			})
+			return
+		}
+		result = equation.Left / equation.Right
 	default:
 		ctx.JSON(http.StatusBadRequest, ErrorResponse{
 			Error: APIError{
