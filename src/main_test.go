@@ -109,12 +109,6 @@ func TestPostCalculate(t *testing.T) {
 		{
 			name:           "modulo",
 			equation:       Equation{Operation: "modulo", Left: 9, Right: 6},
-			expectedResult: 15,
-		},
-		{
-			name:           "divide",
-			equation:       Equation{Operation: "divide", Left: 9, Right: 6},
-			expectedResult: 3,
 		},
 	}
 	for _, test := range tests {
@@ -129,18 +123,48 @@ func TestPostCalculate(t *testing.T) {
 			responseRecorder := httptest.NewRecorder()
 
 			router.ServeHTTP(responseRecorder, request)
+
+			if responseRecorder.Code != http.StatusBadRequest {
+				t.Fatalf("expected status %d, got %d", http.StatusBadRequest, responseRecorder.Code)
+			}
+
 			var response ErrorResponse
 			if err := json.NewDecoder(responseRecorder.Body).Decode(&response); err != nil {
 				t.Fatalf("decode response body: %v", err)
 			}
+
 			if response.Error.Code != "unsupported_operation" {
 				t.Errorf("expected error code %q, got %q", "unsupported_operation", response.Error.Code)
 			}
-			if responseRecorder.Code != http.StatusBadRequest {
-				t.Fatalf("expected status %d, got %d", http.StatusBadRequest, responseRecorder.Code)
-			}
 		})
 	}
+
+	// Test division by zero
+	t.Run("divide_by_zero", func(t *testing.T) {
+		body, err := json.Marshal(Equation{Operation: "divide", Left: 100, Right: 0})
+		if err != nil {
+			t.Fatalf("marshal payload: %v", err)
+		}
+
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/calculate", bytes.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		responseRecorder := httptest.NewRecorder()
+
+		router.ServeHTTP(responseRecorder, request)
+
+		if responseRecorder.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("expected status %d, got %d", http.StatusUnprocessableEntity, responseRecorder.Code)
+		}
+
+		var response ErrorResponse
+		if err := json.NewDecoder(responseRecorder.Body).Decode(&response); err != nil {
+			t.Fatalf("decode response body: %v", err)
+		}
+
+		if response.Error.Code != "division_by_zero" {
+			t.Errorf("expected error code %q, got %q", "division_by_zero", response.Error.Code)
+		}
+	})
 
 	t.Run("malformed", func(t *testing.T) {
 		body, err := json.Marshal([]byte(`{"operation":`))
@@ -164,4 +188,34 @@ func TestPostCalculate(t *testing.T) {
 			t.Fatalf("expected status %d, got %d", http.StatusBadRequest, responseRecorder.Code)
 		}
 	})
+}
+
+// TestValidDivision tests division with non-zero divisor
+func TestValidDivision(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := newRouter()
+
+	body, err := json.Marshal(Equation{Operation: "divide", Left: 84, Right: 2})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/calculate", bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	responseRecorder := httptest.NewRecorder()
+
+	router.ServeHTTP(responseRecorder, request)
+
+	if responseRecorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, responseRecorder.Code)
+	}
+
+	var response CalculateResponse
+	if err := json.NewDecoder(responseRecorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response body: %v", err)
+	}
+
+	if response.Result != 42 {
+		t.Errorf("expected result 42, got %f", response.Result)
+	}
 }
