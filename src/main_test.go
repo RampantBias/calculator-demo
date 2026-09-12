@@ -44,7 +44,7 @@ func TestPostCalculate(t *testing.T) {
 
 	router := newRouter()
 
-	// Add/Subtract/Multiple expected tests
+	// Supported operations
 	tests := []struct {
 		name           string
 		equation       Equation
@@ -64,6 +64,11 @@ func TestPostCalculate(t *testing.T) {
 			name:           "multiply",
 			equation:       Equation{Operation: Multiply, Left: 9, Right: 6},
 			expectedResult: 54,
+		},
+		{
+			name:           "divide",
+			equation:       Equation{Operation: Divide, Left: 84, Right: 2},
+			expectedResult: 42,
 		},
 	}
 	for _, test := range tests {
@@ -100,7 +105,7 @@ func TestPostCalculate(t *testing.T) {
 		})
 	}
 
-	// Unsupported
+	// Unsupported operations
 	tests = []struct {
 		name           string
 		equation       Equation
@@ -110,11 +115,6 @@ func TestPostCalculate(t *testing.T) {
 			name:           "modulo",
 			equation:       Equation{Operation: "modulo", Left: 9, Right: 6},
 			expectedResult: 15,
-		},
-		{
-			name:           "divide",
-			equation:       Equation{Operation: "divide", Left: 9, Right: 6},
-			expectedResult: 3,
 		},
 	}
 	for _, test := range tests {
@@ -141,6 +141,34 @@ func TestPostCalculate(t *testing.T) {
 			}
 		})
 	}
+
+	// Division by zero test
+	t.Run("divide by zero", func(t *testing.T) {
+		equation := Equation{Operation: Divide, Left: 10, Right: 0}
+		body, err := json.Marshal(equation)
+		if err != nil {
+			t.Fatalf("marshal payload: %v", err)
+		}
+
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/calculate", bytes.NewReader(body))
+		request.Header.Set("Content-Type", "application/json")
+		responseRecorder := httptest.NewRecorder()
+
+		router.ServeHTTP(responseRecorder, request)
+
+		if responseRecorder.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("expected status %d, got %d", http.StatusUnprocessableEntity, responseRecorder.Code)
+		}
+
+		var response ErrorResponse
+		if err := json.NewDecoder(responseRecorder.Body).Decode(&response); err != nil {
+			t.Fatalf("decode response body: %v", err)
+		}
+
+		if response.Error.Code != "division_by_zero" {
+			t.Errorf("expected error code %q, got %q", "division_by_zero", response.Error.Code)
+		}
+	})
 
 	t.Run("malformed", func(t *testing.T) {
 		body, err := json.Marshal([]byte(`{"operation":`))
